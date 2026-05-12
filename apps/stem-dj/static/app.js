@@ -1256,6 +1256,20 @@ function bindFxOverlayControls() {
 }
 
 function bindGlobalControls() {
+  // 센터 믹서 탭 전환
+  document.querySelectorAll(".mixer-tabs button[data-mixer-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.mixerTab;
+      document.querySelectorAll(".mixer-tabs button").forEach((b) =>
+        b.classList.toggle("active", b === btn)
+      );
+      ["MIXER", "FX", "FILTER"].forEach((p) => {
+        const el = document.getElementById(`mixerPanel${p}`);
+        if (el) el.hidden = p !== name;
+      });
+    });
+  });
+
   document.querySelectorAll(".nav-tabs button[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });

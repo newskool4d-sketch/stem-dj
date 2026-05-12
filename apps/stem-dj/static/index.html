@@ -62,13 +62,37 @@
     </section>
 
     <section class="center-mixer">
-      <div class="mixer-tabs"><button class="active">MIXER</button><button>FX</button><button>FILTER</button></div>
-      <div class="meter-block"><span>HI</span><input id="highA" type="range" min="-24" max="12" value="0"><input id="highB" type="range" min="-24" max="12" value="0"></div>
-      <div class="meter-block"><span>MID</span><input id="midA" type="range" min="-24" max="12" value="0"><input id="midB" type="range" min="-24" max="12" value="0"></div>
-      <div class="meter-block"><span>LOW</span><input id="lowA" type="range" min="-24" max="12" value="0"><input id="lowB" type="range" min="-24" max="12" value="0"></div>
-      <button id="syncBtn">Sync B to A</button>
-      <label>Crossfader <input id="crossfader" type="range" min="-100" max="100" value="0"></label>
-      <label>Master <input id="masterVolume" type="range" min="0" max="100" value="85"></label>
+      <div class="mixer-tabs"><button class="active" data-mixer-tab="MIXER">MIXER</button><button data-mixer-tab="FX">FX</button><button data-mixer-tab="FILTER">FILTER</button></div>
+      <div id="mixerPanelMIXER" class="mixer-panel">
+        <div class="meter-block"><span>HI</span><input id="highA" type="range" min="-24" max="12" value="0"><input id="highB" type="range" min="-24" max="12" value="0"></div>
+        <div class="meter-block"><span>MID</span><input id="midA" type="range" min="-24" max="12" value="0"><input id="midB" type="range" min="-24" max="12" value="0"></div>
+        <div class="meter-block"><span>LOW</span><input id="lowA" type="range" min="-24" max="12" value="0"><input id="lowB" type="range" min="-24" max="12" value="0"></div>
+        <button id="syncBtn">Sync B to A</button>
+        <label>Crossfader <input id="crossfader" type="range" min="-100" max="100" value="0"></label>
+        <label>Master <input id="masterVolume" type="range" min="0" max="100" value="85"></label>
+      </div>
+      <div id="mixerPanelFX" class="mixer-panel" hidden>
+        <div class="cm-fx-col">
+          <h4>DECK A</h4>
+          <label>Echo <input id="echoA" type="range" min="0" max="80" value="0"></label>
+          <label>Reverb <input id="reverbA" type="range" min="0" max="70" value="0"></label>
+        </div>
+        <div class="cm-fx-col">
+          <h4>DECK B</h4>
+          <label>Echo <input id="echoB" type="range" min="0" max="80" value="0"></label>
+          <label>Reverb <input id="reverbB" type="range" min="0" max="70" value="0"></label>
+        </div>
+      </div>
+      <div id="mixerPanelFILTER" class="mixer-panel" hidden>
+        <div class="cm-fx-col">
+          <h4>DECK A</h4>
+          <label>Filter <input id="filterA" type="range" min="-100" max="100" value="0"></label>
+        </div>
+        <div class="cm-fx-col">
+          <h4>DECK B</h4>
+          <label>Filter <input id="filterB" type="range" min="-100" max="100" value="0"></label>
+        </div>
+      </div>
     </section>
 
     <section class="deck deck-right" id="deckB" data-deck="B">
@@ -103,12 +127,6 @@
   </main>
 
   <section class="utility-row">
-    <div class="fx-panel">
-      <h3>Deck A FX</h3>
-      <label>Filter <input id="filterA" type="range" min="-100" max="100" value="0"></label>
-      <label>Echo <input id="echoA" type="range" min="0" max="80" value="0"></label>
-      <label>Reverb <input id="reverbA" type="range" min="0" max="70" value="0"></label>
-    </div>
     <div class="stems-panel">
       <h3>Stem Control A</h3>
       <div class="stems" id="stemsA"></div>
@@ -116,12 +134,6 @@
     <div class="stems-panel">
       <h3>Stem Control B</h3>
       <div class="stems" id="stemsB"></div>
-    </div>
-    <div class="fx-panel">
-      <h3>Deck B FX</h3>
-      <label>Filter <input id="filterB" type="range" min="-100" max="100" value="0"></label>
-      <label>Echo <input id="echoB" type="range" min="0" max="80" value="0"></label>
-      <label>Reverb <input id="reverbB" type="range" min="0" max="70" value="0"></label>
     </div>
   </section>
 

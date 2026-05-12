@@ -287,6 +287,31 @@ input[type="range"] {
   gap: 2px;
 }
 
+.mixer-panel[hidden] { display: none; }
+
+.mixer-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.cm-fx-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cm-fx-col h4 {
+  margin: 0;
+  font-size: .72rem;
+  color: var(--purple);
+  letter-spacing: .05em;
+}
+
+#mixerPanelFX,
+#mixerPanelFILTER {
+  grid-template-columns: 1fr 1fr;
+}
+
 .meter-block {
   display: grid;
   grid-template-columns: 44px 1fr 1fr;
@@ -304,7 +329,7 @@ input[type="range"] {
   height: 136px;
   padding: 0 6px 6px;
   display: grid;
-  grid-template-columns: 260px 1fr 1fr 260px;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 
@@ -596,7 +621,7 @@ input[type="range"] {
 
   .utility-row {
     height: 102px;
-    grid-template-columns: 220px 1fr 1fr 220px;
+    grid-template-columns: 1fr 1fr;
     gap: 5px;
     padding: 0 5px 5px;
   }
