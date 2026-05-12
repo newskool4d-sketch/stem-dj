@@ -9,6 +9,7 @@ let recordedChunks = [];
 let libraryTracks = [];
 let selectedTrack = null;
 let lastClockAt = 0;
+let bitcrusherModuleLoaded = false;
 let recTimerInterval = null;
 let recStartTime = null;
 let recLevelRaf = null;
@@ -73,6 +74,58 @@ function createImpulse(seconds = 1.4, decay = 2.2) {
   return impulse;
 }
 
+class FlangerNode {
+  constructor(ctx) {
+    this.input = ctx.createGain();
+    this.output = ctx.createGain();
+    const delay = ctx.createDelay(0.02);
+    delay.delayTime.value = 0.005;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.25;
+    lfoGain.gain.value = 0.003;
+    this.wet = ctx.createGain();
+    this.wet.gain.value = 0;
+    lfo.connect(lfoGain);
+    lfoGain.connect(delay.delayTime);
+    this.input.connect(delay);
+    delay.connect(this.wet);
+    this.wet.connect(this.output);
+    this.input.connect(this.output);
+    lfo.start();
+  }
+  setWet(v) { this.wet.gain.value = Math.max(0, Math.min(1, v)); }
+}
+
+class PhaserNode {
+  constructor(ctx) {
+    this.input = ctx.createGain();
+    this.output = ctx.createGain();
+    this.wet = ctx.createGain();
+    this.wet.gain.value = 0;
+    const allpasses = [200, 400, 800, 1600].map((freq) => {
+      const f = ctx.createBiquadFilter();
+      f.type = "allpass";
+      f.frequency.value = freq;
+      f.Q.value = 0.5;
+      return f;
+    });
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.3;
+    lfoGain.gain.value = 800;
+    lfo.connect(lfoGain);
+    allpasses.forEach((f) => lfoGain.connect(f.frequency));
+    this.input.connect(allpasses[0]);
+    for (let i = 0; i < 3; i++) allpasses[i].connect(allpasses[i + 1]);
+    allpasses[3].connect(this.wet);
+    this.wet.connect(this.output);
+    this.input.connect(this.output);
+    lfo.start();
+  }
+  setWet(v) { this.wet.gain.value = Math.max(0, Math.min(1, v)); }
+}
+
 class Deck {
   constructor(id) {
     this.id = id;
@@ -135,7 +188,6 @@ class Deck {
     this.low.connect(this.mid);
     this.mid.connect(this.high);
     this.high.connect(this.filter);
-    this.filter.connect(this.deckGain);
     this.filter.connect(this.delay);
     this.delay.connect(this.feedback);
     this.feedback.connect(this.delay);
@@ -144,6 +196,24 @@ class Deck {
     this.filter.connect(this.reverb);
     this.reverb.connect(this.reverbWet);
     this.reverbWet.connect(this.deckGain);
+    // 새 FX 체인: filter → flanger → phaser → bitcrusher → deckGain
+    this.flanger = new FlangerNode(audioCtx);
+    this.phaser = new PhaserNode(audioCtx);
+    this.bitcrusherReady = false;
+    try {
+      if (!bitcrusherModuleLoaded) {
+        await audioCtx.audioWorklet.addModule("/bitcrusher-processor.js");
+        bitcrusherModuleLoaded = true;
+      }
+      this.bitcrusher = new AudioWorkletNode(audioCtx, "bitcrusher");
+      this.bitcrusherReady = true;
+    } catch {
+      this.bitcrusher = audioCtx.createGain();
+    }
+    this.filter.connect(this.flanger.input);
+    this.flanger.output.connect(this.phaser.input);
+    this.phaser.output.connect(this.bitcrusher);
+    this.bitcrusher.connect(this.deckGain);
     this.deckGain.connect(masterGain);
     updateCrossfader();
   }
@@ -1130,6 +1200,36 @@ function setupRecording() {
   $("recToggle").addEventListener("click", doRecord);
 }
 
+function bindFxOverlayControls() {
+  ["A", "B"].forEach((id) => {
+    // 기존 Filter/Echo/Reverb: utility row 슬라이더와 양방향 동기
+    [["Filter", "filter"], ["Echo", "echo"], ["Reverb", "reverb"]].forEach(([label, utilId]) => {
+      const overlay = $(`fx${label}${id}`);
+      const util = $(`${utilId}${id}`);
+      if (!overlay || !util) return;
+      overlay.addEventListener("input", () => {
+        util.value = overlay.value;
+        util.dispatchEvent(new Event("input")); // 기존 핸들러 실행
+      });
+    });
+
+    // 새 이펙터
+    $(`fxFlanger${id}`)?.addEventListener("input", (e) => {
+      decks[id]?.flanger?.setWet(Number(e.target.value) / 100);
+    });
+    $(`fxPhaser${id}`)?.addEventListener("input", (e) => {
+      decks[id]?.phaser?.setWet(Number(e.target.value) / 100);
+    });
+    $(`fxBitcrush${id}`)?.addEventListener("input", (e) => {
+      const deck = decks[id];
+      if (!deck?.bitcrusherReady) return;
+      const v = Number(e.target.value) / 100;
+      deck.bitcrusher.parameters.get("wet").value = v;
+      deck.bitcrusher.parameters.get("bits").value = Math.max(1, Math.round(16 - v * 12));
+    });
+  });
+}
+
 function bindGlobalControls() {
   document.querySelectorAll(".nav-tabs button[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => activateTab(btn.dataset.tab));
@@ -1205,6 +1305,7 @@ function bindGlobalControls() {
   document.querySelectorAll("[data-loop]").forEach((btn) => {
     btn.addEventListener("click", () => decks[btn.dataset.deck].setLoop(Number(btn.dataset.loop)));
   });
+  bindFxOverlayControls();
 }
 
 function loadSelectedTo(deckId) {
