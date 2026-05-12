@@ -225,10 +225,11 @@ def run_demucs_job(job_id: str, tid: str) -> None:
             return
         for name in STEM_NAMES:
             shutil.copy2(produced / f"{name}.wav", target / f"{name}.wav")
-        shutil.rmtree(out_root, ignore_errors=True)  # 임시 디렉토리 정리
         set_job(job_id, status="done", message="stem 분리가 완료되었습니다.", stems=stem_payload(tid)["stems"])
     except Exception as exc:
         set_job(job_id, status="error", message=str(exc))
+    finally:
+        shutil.rmtree(out_root, ignore_errors=True)
 
 
 def set_job(job_id: str, **updates) -> None:
