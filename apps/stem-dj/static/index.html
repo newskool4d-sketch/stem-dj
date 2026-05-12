@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stem DJ Lab</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">STEM<span>WAVE</span></div>
+    <nav class="nav-tabs">
+      <button class="active" data-tab="PERFORM">PERFORM</button>
+      <button data-tab="LIBRARY">LIBRARY</button>
+      <button data-tab="BROWSE">BROWSE</button>
+      <button data-tab="REC">REC</button>
+      <button data-tab="FX">FX</button>
+    </nav>
+    <div class="top-actions">
+      <button id="refreshLibrary">Refresh</button>
+      <button id="recordBtn" class="danger">Record</button>
+      <a id="downloadMix" hidden>Download mix</a>
+      <span class="clock" id="clock">--:--</span>
+    </div>
+  </header>
+
+  <div id="performView" class="tab-view">
+    <section class="global-wave">
+    <div class="lane"><span>A</span><canvas id="waveA" width="1200" height="78"></canvas></div>
+    <div class="lane"><span>B</span><canvas id="waveB" width="1200" height="78"></canvas></div>
+  </section>
+
+  <main class="perform-grid">
+    <section class="deck deck-left" id="deckA" data-deck="A">
+      <div class="deck-head">
+        <span class="deck-id">A</span>
+        <div class="art"></div>
+        <div class="track-meta">
+          <h2 id="titleA">Empty Deck</h2>
+          <p><span id="timeA">00:00</span> / <span id="durationA">00:00</span></p>
+        </div>
+        <div class="tempo-box"><strong id="bpmA">BPM --</strong><span id="tempoReadA">0.0%</span></div>
+      </div>
+      <canvas id="platterA" class="platter" width="180" height="180"></canvas>
+      <div class="transport">
+        <button id="loadToA">Load selected</button>
+        <button id="playA" class="primary">Play</button>
+        <button id="cueA">Cue</button>
+        <button id="stemA">Stem Split</button>
+        <label class="toggle"><input id="vinylA" type="checkbox" checked> Vinyl</label>
+        <label>Tempo <input id="tempoA" type="range" min="-16" max="16" value="0" step="0.1"></label>
+      </div>
+      <div class="cue-strip" id="cuesA"></div>
+      <div class="loop-strip">
+        <button data-loop="0.5" data-deck="A">1/2</button>
+        <button data-loop="1" data-deck="A">1</button>
+        <button data-loop="4" data-deck="A">4</button>
+        <button data-loop="8" data-deck="A">8</button>
+        <button data-loop="0" data-deck="A">Loop off</button>
+      </div>
+      <div class="loop-readout" id="loopReadA">Loop off</div>
+    </section>
+
+    <section class="center-mixer">
+      <div class="mixer-tabs"><button class="active">MIXER</button><button>FX</button><button>FILTER</button></div>
+      <div class="meter-block"><span>HI</span><input id="highA" type="range" min="-24" max="12" value="0"><input id="highB" type="range" min="-24" max="12" value="0"></div>
+      <div class="meter-block"><span>MID</span><input id="midA" type="range" min="-24" max="12" value="0"><input id="midB" type="range" min="-24" max="12" value="0"></div>
+      <div class="meter-block"><span>LOW</span><input id="lowA" type="range" min="-24" max="12" value="0"><input id="lowB" type="range" min="-24" max="12" value="0"></div>
+      <button id="syncBtn">Sync B to A</button>
+      <label>Crossfader <input id="crossfader" type="range" min="-100" max="100" value="0"></label>
+      <label>Master <input id="masterVolume" type="range" min="0" max="100" value="85"></label>
+    </section>
+
+    <section class="deck deck-right" id="deckB" data-deck="B">
+      <div class="deck-head">
+        <span class="deck-id">B</span>
+        <div class="art alt"></div>
+        <div class="track-meta">
+          <h2 id="titleB">Empty Deck</h2>
+          <p><span id="timeB">00:00</span> / <span id="durationB">00:00</span></p>
+        </div>
+        <div class="tempo-box"><strong id="bpmB">BPM --</strong><span id="tempoReadB">0.0%</span></div>
+      </div>
+      <canvas id="platterB" class="platter" width="180" height="180"></canvas>
+      <div class="transport">
+        <button id="loadToB">Load selected</button>
+        <button id="playB" class="primary">Play</button>
+        <button id="cueB">Cue</button>
+        <button id="stemB">Stem Split</button>
+        <label class="toggle"><input id="vinylB" type="checkbox" checked> Vinyl</label>
+        <label>Tempo <input id="tempoB" type="range" min="-16" max="16" value="0" step="0.1"></label>
+      </div>
+      <div class="cue-strip" id="cuesB"></div>
+      <div class="loop-strip">
+        <button data-loop="0.5" data-deck="B">1/2</button>
+        <button data-loop="1" data-deck="B">1</button>
+        <button data-loop="4" data-deck="B">4</button>
+        <button data-loop="8" data-deck="B">8</button>
+        <button data-loop="0" data-deck="B">Loop off</button>
+      </div>
+      <div class="loop-readout" id="loopReadB">Loop off</div>
+    </section>
+  </main>
+
+  <section class="utility-row">
+    <div class="fx-panel">
+      <h3>Deck A FX</h3>
+      <label>Filter <input id="filterA" type="range" min="-100" max="100" value="0"></label>
+      <label>Echo <input id="echoA" type="range" min="0" max="80" value="0"></label>
+      <label>Reverb <input id="reverbA" type="range" min="0" max="70" value="0"></label>
+    </div>
+    <div class="stems-panel">
+      <h3>Stem Control A</h3>
+      <div class="stems" id="stemsA"></div>
+    </div>
+    <div class="stems-panel">
+      <h3>Stem Control B</h3>
+      <div class="stems" id="stemsB"></div>
+    </div>
+    <div class="fx-panel">
+      <h3>Deck B FX</h3>
+      <label>Filter <input id="filterB" type="range" min="-100" max="100" value="0"></label>
+      <label>Echo <input id="echoB" type="range" min="0" max="80" value="0"></label>
+      <label>Reverb <input id="reverbB" type="range" min="0" max="70" value="0"></label>
+    </div>
+  </section>
+
+  <section class="zoom-row">
+    <div class="zoom-panel">
+      <div class="zoom-head">
+        <strong>Deck A Detail</strong>
+        <span id="zoomLabelA">No track loaded</span>
+      </div>
+      <canvas id="zoomA" width="1000" height="118"></canvas>
+    </div>
+    <div class="zoom-panel">
+      <div class="zoom-head">
+        <strong>Deck B Detail</strong>
+        <span id="zoomLabelB">No track loaded</span>
+      </div>
+      <canvas id="zoomB" width="1000" height="118"></canvas>
+    </div>
+  </section>
+
+  <section class="library-zone">
+    <aside class="library-menu">
+      <strong>Collection</strong>
+      <span class="disabled">All Tracks</span>
+      <span class="disabled">Stems</span>
+      <span class="disabled">Playlists</span>
+    </aside>
+    <section class="library-main">
+      <div class="library-settings">
+        <input id="libraryInput" type="text" placeholder="Library folder path">
+        <button id="saveLibrary">Set Library</button>
+        <label class="file-add">Add files<input id="filePicker" type="file" accept="audio/*" multiple></label>
+      </div>
+      <div class="library-head">
+        <input id="search" type="search" placeholder="Search tracks...">
+        <div id="demucsState" class="notice"></div>
+      </div>
+      <div id="libraryPath" class="path-line">Library loading...</div>
+      <div id="trackList" class="track-table"></div>
+    </section>
+    <aside class="track-preview">
+      <h3>Selected</h3>
+      <div id="selectedPreview">No track selected</div>
+      <div id="statusLog" class="status-log"></div>
+    </aside>
+  </section>
+  </div>
+
+  <!-- LIBRARY 탭 전체 뷰 -->
+  <div id="libraryView" class="tab-view" hidden>
+    <div class="lib-toolbar">
+      <input id="libSearch" type="search" placeholder="Search...">
+      <select id="libFilter">
+        <option value="all">All Tracks</option>
+        <option value="stems">Stems Ready</option>
+        <option value="nostems">No Stems</option>
+      </select>
+      <select id="libSort">
+        <option value="title">Sort: Title</option>
+        <option value="bpm">Sort: BPM</option>
+        <option value="size">Sort: Size</option>
+        <option value="modified">Sort: Date</option>
+      </select>
+      <button id="libRefresh">Refresh</button>
+    </div>
+    <div class="lib-table">
+      <div class="lib-head">
+        <span>#</span><span>Title</span><span>Filename</span>
+        <span>BPM</span><span>Size</span><span>Stems</span><span>Load</span>
+      </div>
+      <div id="libRows"></div>
+    </div>
+    <div id="libStatus" class="lib-status"></div>
+  </div>
+
+  <!-- BROWSE 탭 전체 뷰 -->
+  <div id="browseView" class="tab-view" hidden>
+    <div class="browse-layout">
+      <aside class="browse-filters">
+        <strong>FILTERS</strong>
+        <div class="filter-group">
+          <label class="filter-label">BPM RANGE</label>
+          <div class="bpm-range">
+            <input id="bpmMin" type="number" value="60" min="40" max="220">
+            <span>–</span>
+            <input id="bpmMax" type="number" value="200" min="40" max="220">
+          </div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">STEMS</label>
+          <label><input id="fStemsReady" type="checkbox" checked> Ready</label>
+          <label><input id="fStemsNo" type="checkbox" checked> Not split</label>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">FILE TYPE</label>
+          <label><input id="fExt_mp3" type="checkbox" checked> mp3</label>
+          <label><input id="fExt_wav" type="checkbox" checked> wav</label>
+          <label><input id="fExt_flac" type="checkbox" checked> flac</label>
+          <label><input id="fExt_m4a" type="checkbox" checked> m4a</label>
+        </div>
+        <button id="browseApply">Apply</button>
+        <button id="browseReset">Reset</button>
+      </aside>
+      <section class="browse-results">
+        <div id="browseCount" class="browse-count"></div>
+        <div id="browseRows"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- REC 오버레이 -->
+  <div id="recOverlay" class="overlay" hidden>
+    <div class="overlay-panel">
+      <div class="overlay-header">
+        <span>REC</span>
+        <button class="overlay-close" data-close="recOverlay">✕</button>
+      </div>
+      <div class="rec-content">
+        <div id="recTimer" class="rec-timer">00:00:00</div>
+        <canvas id="recLevel" width="380" height="28"></canvas>
+        <div class="rec-actions">
+          <button id="recToggle" class="danger">Record</button>
+          <a id="recDownload" class="rec-download" hidden>Download .webm</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FX 오버레이 -->
+  <div id="fxOverlay" class="overlay" hidden>
+    <div class="overlay-panel overlay-wide">
+      <div class="overlay-header">
+        <span>FX</span>
+        <button class="overlay-close" data-close="fxOverlay">✕</button>
+      </div>
+      <div class="fx-overlay-grid">
+        <div class="fx-col">
+          <h3 style="color:var(--purple)">DECK A</h3>
+          <label>Filter <input id="fxFilterA" type="range" min="-100" max="100" value="0"></label>
+          <label>Echo <input id="fxEchoA" type="range" min="0" max="80" value="0"></label>
+          <label>Reverb <input id="fxReverbA" type="range" min="0" max="70" value="0"></label>
+          <hr class="fx-divider">
+          <label>Flanger <input id="fxFlangerA" type="range" min="0" max="100" value="0"></label>
+          <label>Phaser <input id="fxPhaserA" type="range" min="0" max="100" value="0"></label>
+          <label>Bitcrush <input id="fxBitcrushA" type="range" min="0" max="100" value="0"></label>
+        </div>
+        <div class="fx-col">
+          <h3 style="color:var(--blue)">DECK B</h3>
+          <label>Filter <input id="fxFilterB" type="range" min="-100" max="100" value="0"></label>
+          <label>Echo <input id="fxEchoB" type="range" min="0" max="80" value="0"></label>
+          <label>Reverb <input id="fxReverbB" type="range" min="0" max="70" value="0"></label>
+          <hr class="fx-divider">
+          <label>Flanger <input id="fxFlangerB" type="range" min="0" max="100" value="0"></label>
+          <label>Phaser <input id="fxPhaserB" type="range" min="0" max="100" value="0"></label>
+          <label>Bitcrush <input id="fxBitcrushB" type="range" min="0" max="100" value="0"></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
