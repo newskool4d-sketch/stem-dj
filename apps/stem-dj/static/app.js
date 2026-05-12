@@ -827,6 +827,72 @@ function renderLibraryTab() {
   }
 }
 
+function renderBrowseTab() {
+  const bpmMin = Number($("bpmMin")?.value ?? 40);
+  const bpmMax = Number($("bpmMax")?.value ?? 220);
+  const stemsReady = $("fStemsReady")?.checked ?? true;
+  const stemsNo = $("fStemsNo")?.checked ?? true;
+  const extChecks = ["mp3", "wav", "flac", "m4a"];
+  const exts = extChecks.filter((e) => $(`fExt_${e}`)?.checked ?? true);
+
+  const results = libraryTracks.filter((t) => {
+    const bpm = t.bpm;
+    const bpmOk = !bpm || (bpm >= bpmMin && bpm <= bpmMax);
+    const stemsOk = (stemsReady && t.stemReady) || (stemsNo && !t.stemReady);
+    const ext = t.filename.split(".").pop().toLowerCase();
+    const extOk = exts.length === 0 || exts.includes(ext);
+    return bpmOk && stemsOk && extOk;
+  });
+
+  const count = $("browseCount");
+  if (count) count.textContent = `${results.length}개 결과`;
+
+  const container = $("browseRows");
+  container.innerHTML = "";
+
+  results.forEach((track) => {
+    const row = document.createElement("div");
+    row.className = "browse-row";
+
+    const info = document.createElement("div");
+    info.className = "browse-info";
+
+    const title = document.createElement("strong");
+    title.textContent = track.title;
+
+    const meta = document.createElement("span");
+    meta.className = "browse-meta";
+    const ext = track.filename.split(".").pop().toLowerCase();
+    const sizeStr = track.size ? `${Math.round(Number(track.size) / 1024 / 1024)} MB` : "local";
+    meta.textContent = [track.bpm ? `${track.bpm} BPM` : null, ext, sizeStr].filter(Boolean).join(" · ");
+
+    const badge = document.createElement("span");
+    badge.className = track.stemReady ? "badge-stems" : "badge-no-stems";
+    badge.textContent = track.stemReady ? "stems ✓" : "no stems";
+
+    info.appendChild(title);
+    info.appendChild(meta);
+    info.appendChild(badge);
+
+    const actions = document.createElement("div");
+    actions.className = "browse-actions";
+    ["A", "B"].forEach((deckId) => {
+      const btn = document.createElement("button");
+      btn.textContent = deckId;
+      btn.className = `load-btn load-btn-${deckId.toLowerCase()}`;
+      btn.addEventListener("click", () => {
+        selectedTrack = track;
+        decks[deckId].loadMix(track).catch((err) => log(`Deck ${deckId} 로드 실패: ${err.message}`));
+      });
+      actions.appendChild(btn);
+    });
+
+    row.appendChild(info);
+    row.appendChild(actions);
+    container.appendChild(row);
+  });
+}
+
 function toggleOverlay(name) {
   const id = name === "REC" ? "recOverlay" : "fxOverlay";
   const el = document.getElementById(id);
@@ -1013,6 +1079,15 @@ function bindGlobalControls() {
   $("libFilter")?.addEventListener("change", renderLibraryTab);
   $("libSort")?.addEventListener("change", renderLibraryTab);
   $("libRefresh")?.addEventListener("click", () => refreshLibrary().then(renderLibraryTab));
+  // BROWSE 탭 컨트롤
+  $("browseApply")?.addEventListener("click", renderBrowseTab);
+  $("browseReset")?.addEventListener("click", () => {
+    $("bpmMin").value = 60;
+    $("bpmMax").value = 200;
+    ["fStemsReady", "fStemsNo"].forEach((id) => { $(id).checked = true; });
+    ["mp3", "wav", "flac", "m4a"].forEach((e) => { $(`fExt_${e}`).checked = true; });
+    renderBrowseTab();
+  });
   $("loadToA").addEventListener("click", () => loadSelectedTo("A"));
   $("loadToB").addEventListener("click", () => loadSelectedTo("B"));
   $("filePicker").addEventListener("change", (event) => {
