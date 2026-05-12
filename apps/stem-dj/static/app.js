@@ -830,10 +830,10 @@ function renderLibraryTab() {
 function renderBrowseTab() {
   const bpmMin = Number($("bpmMin")?.value ?? 40);
   const bpmMax = Number($("bpmMax")?.value ?? 220);
-  const stemsReady = $("fStemsReady")?.checked ?? true;
-  const stemsNo = $("fStemsNo")?.checked ?? true;
+  const stemsReady = $("fStemsReady")?.checked ?? false;
+  const stemsNo = $("fStemsNo")?.checked ?? false;
   const extChecks = ["mp3", "wav", "flac", "m4a"];
-  const exts = extChecks.filter((e) => $(`fExt_${e}`)?.checked ?? true);
+  const exts = extChecks.filter((e) => $(`fExt_${e}`)?.checked ?? false);
 
   const results = libraryTracks.filter((t) => {
     const bpm = t.bpm;
@@ -848,6 +848,7 @@ function renderBrowseTab() {
   if (count) count.textContent = `${results.length}개 결과`;
 
   const container = $("browseRows");
+  if (!container) return;
   container.innerHTML = "";
 
   results.forEach((track) => {
@@ -880,7 +881,8 @@ function renderBrowseTab() {
       const btn = document.createElement("button");
       btn.textContent = deckId;
       btn.className = `load-btn load-btn-${deckId.toLowerCase()}`;
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
         selectedTrack = track;
         decks[deckId].loadMix(track).catch((err) => log(`Deck ${deckId} 로드 실패: ${err.message}`));
       });
