@@ -1001,6 +1001,7 @@ async function refreshLibrary() {
   const demucsText = data.demucs ? "Demucs detected. Stem Split is available." : "Demucs not detected. Playback works; stem split needs Demucs.";
   $("demucsState").textContent = data.scanMessage ? `${demucsText} ${data.scanMessage}` : demucsText;
   renderTracks();
+  renderLibraryTab();
 }
 
 function renderTracks() {
