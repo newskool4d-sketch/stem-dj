@@ -749,6 +749,82 @@ function activateTab(name) {
   if (name === "BROWSE") renderBrowseTab();
 }
 
+function renderLibraryTab() {
+  const q = ($("libSearch")?.value || "").trim().toLowerCase();
+  const filter = $("libFilter")?.value || "all";
+  const sort = $("libSort")?.value || "title";
+
+  let tracks = libraryTracks.filter((t) => {
+    const matchQ = !q || t.title.toLowerCase().includes(q) || t.filename.toLowerCase().includes(q);
+    const matchF =
+      filter === "all" ||
+      (filter === "stems" && t.stemReady) ||
+      (filter === "nostems" && !t.stemReady);
+    return matchQ && matchF;
+  });
+
+  tracks = [...tracks].sort((a, b) => {
+    if (sort === "bpm") return (a.bpm ?? 9999) - (b.bpm ?? 9999);
+    if (sort === "size") return (b.size ?? 0) - (a.size ?? 0);
+    if (sort === "modified") return (b.modified ?? 0) - (a.modified ?? 0);
+    return a.title.localeCompare(b.title);
+  });
+
+  const rows = $("libRows");
+  rows.innerHTML = "";
+
+  tracks.forEach((track, i) => {
+    const row = document.createElement("div");
+    row.className = "lib-row" + (selectedTrack?.id === track.id ? " selected" : "");
+
+    const cells = [
+      { text: String(i + 1), tag: "span" },
+      { text: track.title, tag: "strong" },
+      { text: track.filename, tag: "span" },
+      { text: track.bpm ?? "—", tag: "span", cls: track.bpm ? "bpm-val" : "bpm-na" },
+      { text: track.size ? `${Math.round(track.size / 1024 / 1024)} MB` : "local", tag: "span" },
+      { text: track.stemReady ? "✓" : "—", tag: "span", cls: track.stemReady ? "stems-ready" : "" },
+    ];
+
+    cells.forEach(({ text, tag, cls }) => {
+      const el = document.createElement(tag);
+      el.textContent = text;
+      if (cls) el.className = cls;
+      row.appendChild(el);
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "lib-actions";
+    ["A", "B"].forEach((deckId) => {
+      const btn = document.createElement("button");
+      btn.textContent = deckId;
+      btn.className = `load-btn load-btn-${deckId.toLowerCase()}`;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectedTrack = track;
+        decks[deckId].loadMix(track).catch((err) => log(`Deck ${deckId} 로드 실패: ${err.message}`));
+        renderTracks();
+        renderSelectedPreview();
+      });
+      actions.appendChild(btn);
+    });
+    row.appendChild(actions);
+
+    row.addEventListener("click", () => {
+      selectedTrack = track;
+      renderTracks();
+      renderSelectedPreview();
+      rows.querySelectorAll(".lib-row").forEach((r) => r.classList.remove("selected"));
+      row.classList.add("selected");
+    });
+
+    rows.appendChild(row);
+  });
+
+  const status = $("libStatus");
+  if (status) status.textContent = `${tracks.length}개 트랙 · ${$("libraryPath").textContent}`;
+}
+
 function toggleOverlay(name) {
   const id = name === "REC" ? "recOverlay" : "fxOverlay";
   const el = document.getElementById(id);
@@ -930,6 +1006,11 @@ function bindGlobalControls() {
     log(`Library set: ${data.library}`);
   });
   $("search").addEventListener("input", renderTracks);
+  // LIBRARY 탭 컨트롤
+  $("libSearch")?.addEventListener("input", renderLibraryTab);
+  $("libFilter")?.addEventListener("change", renderLibraryTab);
+  $("libSort")?.addEventListener("change", renderLibraryTab);
+  $("libRefresh")?.addEventListener("click", () => refreshLibrary().then(renderLibraryTab));
   $("loadToA").addEventListener("click", () => loadSelectedTo("A"));
   $("loadToB").addEventListener("click", () => loadSelectedTo("B"));
   $("filePicker").addEventListener("change", (event) => {
