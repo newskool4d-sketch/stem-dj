@@ -782,7 +782,7 @@ function renderLibraryTab() {
       { text: track.title, tag: "strong" },
       { text: track.filename, tag: "span" },
       { text: track.bpm ?? "—", tag: "span", cls: track.bpm ? "bpm-val" : "bpm-na" },
-      { text: track.size ? `${Math.round(track.size / 1024 / 1024)} MB` : "local", tag: "span" },
+      { text: track.size ? `${Math.round(Number(track.size) / 1024 / 1024)} MB` : "local", tag: "span" },
       { text: track.stemReady ? "✓" : "—", tag: "span", cls: track.stemReady ? "stems-ready" : "" },
     ];
 
@@ -822,7 +822,9 @@ function renderLibraryTab() {
   });
 
   const status = $("libStatus");
-  if (status) status.textContent = `${tracks.length}개 트랙 · ${$("libraryPath").textContent}`;
+  if (status && $("libraryPath")) {
+    status.textContent = `${tracks.length}개 트랙 · ${$("libraryPath").textContent}`;
+  }
 }
 
 function toggleOverlay(name) {
