@@ -1043,8 +1043,8 @@ function startLevelMeter() {
   if (!recAnalyser) {
     recAnalyser = audioCtx.createAnalyser();
     recAnalyser.fftSize = 256;
-    masterGain.connect(recAnalyser);
   }
+  masterGain.connect(recAnalyser);
   const canvas = $("recLevel");
   if (!canvas) return;
   const ctx2d = canvas.getContext("2d");
@@ -1088,6 +1088,10 @@ function setupRecording() {
       $("recToggle").textContent = "Record";
       stopRecTimer();
       stopLevelMeter();
+      return;
+    }
+    if (!recorderDestination?.stream) {
+      log("오디오 스트림을 초기화할 수 없습니다.");
       return;
     }
     recordedChunks = [];
