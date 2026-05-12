@@ -9,6 +9,7 @@ let recordedChunks = [];
 let libraryTracks = [];
 let selectedTrack = null;
 let lastClockAt = 0;
+const localObjectUrls = [];
 let bitcrusherModuleLoaded = false;
 let recTimerInterval = null;
 let recStartTime = null;
@@ -1010,11 +1011,22 @@ function renderTracks() {
     const row = document.createElement("div");
     row.className = "track" + (selectedTrack?.id === track.id ? " selected" : "");
     const size = track.size ? `${Math.round(track.size / 1024 / 1024)} MB` : "local";
-    row.innerHTML = `
-      <strong>${track.title}</strong>
-      <span>${track.filename}</span>
-      <span>${track.stemReady ? "stems ready" : "original"}</span>
-      <span>${size}</span>`;
+    const titleEl = document.createElement("strong");
+    titleEl.textContent = track.title;
+
+    const fnameEl = document.createElement("span");
+    fnameEl.textContent = track.filename;
+
+    const stemsEl = document.createElement("span");
+    stemsEl.textContent = track.stemReady ? "stems ready" : "original";
+
+    const sizeEl = document.createElement("span");
+    sizeEl.textContent = size;
+
+    row.appendChild(titleEl);
+    row.appendChild(fnameEl);
+    row.appendChild(stemsEl);
+    row.appendChild(sizeEl);
     row.addEventListener("click", () => {
       selectedTrack = track;
       renderTracks();
@@ -1031,18 +1043,25 @@ function renderSelectedPreview() {
     box.textContent = "No track selected";
     return;
   }
-  box.innerHTML = `
-    <strong>${selectedTrack.title}</strong><br>
-    <span>${selectedTrack.filename}</span><br>
-    <span>${selectedTrack.stemReady ? "Stem cache ready" : "Original track"}</span>`;
+  box.innerHTML = "";
+  const titleEl = document.createElement("strong");
+  titleEl.textContent = selectedTrack.title;
+  const fnameEl = document.createElement("span");
+  fnameEl.textContent = selectedTrack.filename;
+  const stemsEl = document.createElement("span");
+  stemsEl.textContent = selectedTrack.stemReady ? "Stem cache ready" : "Original track";
+  [titleEl, document.createElement("br"), fnameEl, document.createElement("br"), stemsEl]
+    .forEach((el) => box.appendChild(el));
 }
 
 function localFileTrack(file) {
+  const url = URL.createObjectURL(file);
+  localObjectUrls.push(url);
   return {
     id: null,
     title: file.name.replace(/\.[^.]+$/, ""),
     filename: file.name,
-    url: URL.createObjectURL(file),
+    url,
   };
 }
 
@@ -1172,10 +1191,13 @@ function setupRecording() {
       if (event.data.size) recordedChunks.push(event.data);
     };
     mediaRecorder.onstop = () => {
+      const topLink = $("downloadMix");
+      if (topLink.href && topLink.href.startsWith("blob:")) {
+        URL.revokeObjectURL(topLink.href);
+      }
       const blob = new Blob(recordedChunks, { type: "audio/webm" });
       const url = URL.createObjectURL(blob);
       // topbar 링크
-      const topLink = $("downloadMix");
       topLink.href = url;
       topLink.download = `stem-dj-mix-${Date.now()}.webm`;
       topLink.hidden = false;
