@@ -80,21 +80,22 @@ class FlangerNode {
     this.output = ctx.createGain();
     const delay = ctx.createDelay(0.02);
     delay.delayTime.value = 0.005;
-    const lfo = ctx.createOscillator();
+    this.lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.25;
+    this.lfo.frequency.value = 0.25;
     lfoGain.gain.value = 0.003;
     this.wet = ctx.createGain();
     this.wet.gain.value = 0;
-    lfo.connect(lfoGain);
+    this.lfo.connect(lfoGain);
     lfoGain.connect(delay.delayTime);
     this.input.connect(delay);
     delay.connect(this.wet);
     this.wet.connect(this.output);
     this.input.connect(this.output);
-    lfo.start();
+    this.lfo.start();
   }
   setWet(v) { this.wet.gain.value = Math.max(0, Math.min(1, v)); }
+  dispose() { try { this.lfo.stop(); } catch {} }
 }
 
 class PhaserNode {
@@ -110,20 +111,21 @@ class PhaserNode {
       f.Q.value = 0.5;
       return f;
     });
-    const lfo = ctx.createOscillator();
+    this.lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.3;
+    this.lfo.frequency.value = 0.3;
     lfoGain.gain.value = 800;
-    lfo.connect(lfoGain);
+    this.lfo.connect(lfoGain);
     allpasses.forEach((f) => lfoGain.connect(f.frequency));
     this.input.connect(allpasses[0]);
     for (let i = 0; i < 3; i++) allpasses[i].connect(allpasses[i + 1]);
     allpasses[3].connect(this.wet);
     this.wet.connect(this.output);
     this.input.connect(this.output);
-    lfo.start();
+    this.lfo.start();
   }
   setWet(v) { this.wet.gain.value = Math.max(0, Math.min(1, v)); }
+  dispose() { try { this.lfo.stop(); } catch {} }
 }
 
 class Deck {
