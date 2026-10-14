@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+server.*.log
+settings.json
+tools/
+.stems/
+recordings/
