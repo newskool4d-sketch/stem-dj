@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# allow: SIZE_OK - Single-file stdlib server entrypoint retained for this safety slice.
 import hashlib
 import json
 import mimetypes
@@ -8,6 +9,7 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -16,11 +18,22 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
-CONFIG_PATH = APP_DIR / "settings.json"
-DEFAULT_LIBRARY_DIR = Path.home() / "Music" / "DJ Library"
+CONFIG_PATH = Path(os.environ.get("STEM_DJ_CONFIG_PATH", str(APP_DIR / "settings.json"))).expanduser()
+DEFAULT_LIBRARY_DIR = Path(
+    os.environ.get("STEM_DJ_DEFAULT_LIBRARY", str(Path.home() / "Music" / "DJ Library"))
+).expanduser()
 LOCAL_DEMUCS = APP_DIR / "tools" / "demucs-env" / "Scripts" / "demucs.exe"
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"}
 STEM_NAMES = ("vocals", "drums", "bass", "other")
+SERVER_HOST = "127.0.0.1"
+SERVER_PORT = 8765
+ALLOWED_ORIGINS = frozenset({
+    f"http://{SERVER_HOST}:{SERVER_PORT}",
+    f"http://localhost:{SERVER_PORT}",
+})
+JOB_RETENTION_SECONDS = 3600
+ACTIVE_JOB_STALE_SECONDS = 3600
+STALE_JOB_MESSAGE = "stem 분리 작업이 오래 응답하지 않아 중단된 것으로 표시했습니다. 다시 시도해 주세요."
 
 TRACKS: dict[str, Path] = {}
 JOBS: dict[str, dict] = {}
@@ -57,6 +70,14 @@ def stems_dir() -> Path:
 
 def track_id(path: Path) -> str:
     return hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
+
+
+def path_is_inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def scan_library() -> list[dict]:
@@ -115,9 +136,7 @@ def safe_track_path(tid: str) -> Path | None:
     path = TRACKS.get(tid)
     if not path:
         return None
-    try:
-        path.resolve().relative_to(library_dir().resolve())
-    except ValueError:
+    if not path_is_inside(path, library_dir()):
         return None
     return path
 
@@ -129,6 +148,15 @@ def stem_dir(tid: str) -> Path:
 def stems_ready(tid: str) -> bool:
     base = stem_dir(tid)
     return all((base / f"{name}.wav").exists() for name in STEM_NAMES)
+
+
+def safe_stem_path(tid: str, name: str) -> Path | None:
+    if name not in STEM_NAMES or not safe_track_path(tid):
+        return None
+    path = stem_dir(tid) / f"{name}.wav"
+    if not path_is_inside(path, stems_dir()):
+        return None
+    return path
 
 
 def stem_payload(tid: str) -> dict:
@@ -239,13 +267,30 @@ def set_job(job_id: str, **updates) -> None:
         job["updated"] = time.time()
 
 
+def new_job_id(tid: str) -> str:
+    return f"{tid}-{uuid.uuid4().hex}"
+
+
 def purge_old_jobs() -> None:
-    cutoff = time.time() - 3600  # 1시간 경과 job 제거
+    now = time.time()
+    terminal_cutoff = now - JOB_RETENTION_SECONDS
+    active_cutoff = now - ACTIVE_JOB_STALE_SECONDS
     with JOBS_LOCK:
-        stale = [jid for jid, j in JOBS.items()
-                 if j.get("status") in ("done", "error") and j.get("updated", 0) < cutoff]
-        for jid in stale:
+        stale_terminal = [
+            jid for jid, job in JOBS.items()
+            if job.get("status") in ("done", "error") and job.get("updated", 0) < terminal_cutoff
+        ]
+        stale_active = [
+            jid for jid, job in JOBS.items()
+            if job.get("status") in ("queued", "running") and job.get("updated", 0) < active_cutoff
+        ]
+        for jid in stale_terminal:
             del JOBS[jid]
+        for jid in stale_active:
+            job = JOBS[jid]
+            job["status"] = "error"
+            job["message"] = STALE_JOB_MESSAGE
+            job["updated"] = now
 
 
 class StemDJHandler(SimpleHTTPRequestHandler):
@@ -285,6 +330,7 @@ class StemDJHandler(SimpleHTTPRequestHandler):
             write_json(self, stem_payload(tid) if safe_track_path(tid) else {"ready": False, "stems": {}})
             return
         if parsed.path == "/api/stems/job":
+            purge_old_jobs()
             job_id = qs.get("job", [""])[0]
             with JOBS_LOCK:
                 job = JOBS.get(job_id, {"status": "missing", "message": "작업을 찾을 수 없습니다."})
@@ -300,12 +346,29 @@ class StemDJHandler(SimpleHTTPRequestHandler):
             if name not in STEM_NAMES:
                 self.send_error(HTTPStatus.BAD_REQUEST, "invalid stem name")
                 return
-            stream_file(self, stem_dir(tid) / f"{name}.wav")
+            path = safe_stem_path(tid, name)
+            stream_file(self, path) if path else self.send_error(HTTPStatus.NOT_FOUND, "stem not found")
             return
         super().do_GET()
 
+    # 상태 변경 POST에 대한 CSRF 방어.
+    # 악성 웹페이지가 Content-Type: text/plain(프리플라이트 미유발)으로 로컬 서버에
+    # JSON 본문을 보내 설정을 바꾸는 것을 막는다. 정식 UI(동일 출처) 요청만 허용한다.
+    def _reject_csrf(self) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is not None and origin not in ALLOWED_ORIGINS:
+            write_json(self, {"status": "error", "message": "허용되지 않은 출처의 요청입니다."}, 403)
+            return True
+        ctype = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if ctype != "application/json":
+            write_json(self, {"status": "error", "message": "Content-Type은 application/json이어야 합니다."}, 415)
+            return True
+        return False
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if self._reject_csrf():
+            return
         if parsed.path == "/api/settings":
             length = int(self.headers.get("Content-Length", "0") or 0)
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
@@ -327,6 +390,7 @@ class StemDJHandler(SimpleHTTPRequestHandler):
         if parsed.path != "/api/stems/start":
             self.send_error(HTTPStatus.NOT_FOUND, "not found")
             return
+        purge_old_jobs()
         length = int(self.headers.get("Content-Length", "0") or 0)
         payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         tid = payload.get("id", "")
@@ -336,7 +400,7 @@ class StemDJHandler(SimpleHTTPRequestHandler):
         if stems_ready(tid):
             write_json(self, {"status": "done", "message": "이미 분리된 stem이 있습니다.", **stem_payload(tid)})
             return
-        job_id = f"{tid}-{int(time.time())}"
+        job_id = new_job_id(tid)
         set_job(job_id, status="queued", message="stem 분리 대기 중입니다.")
         thread = threading.Thread(target=run_demucs_job, args=(job_id, tid), daemon=True)
         thread.start()
@@ -346,8 +410,8 @@ class StemDJHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     ensure_dirs()
     os.chdir(STATIC_DIR)
-    server = ThreadingHTTPServer(("127.0.0.1", 8765), StemDJHandler)
-    print("Stem DJ running at http://127.0.0.1:8765")
+    server = ThreadingHTTPServer((SERVER_HOST, SERVER_PORT), StemDJHandler)
+    print(f"Stem DJ running at http://{SERVER_HOST}:{SERVER_PORT}")
     print(f"Library: {library_dir()}")
     server.serve_forever()
 

@@ -41,7 +41,7 @@
         </div>
         <div class="tempo-box"><strong id="bpmA">BPM --</strong><span id="tempoReadA">0.0%</span></div>
       </div>
-      <canvas id="platterA" class="platter" width="180" height="180"></canvas>
+      <canvas id="platterA" class="platter" width="220" height="220"></canvas>
       <div class="transport">
         <button id="loadToA">Load selected</button>
         <button id="playA" class="primary">Play</button>
@@ -54,6 +54,7 @@
       <div class="loop-strip">
         <button data-loop="0.5" data-deck="A">1/2</button>
         <button data-loop="1" data-deck="A">1</button>
+        <button data-loop="2" data-deck="A">2</button>
         <button data-loop="4" data-deck="A">4</button>
         <button data-loop="8" data-deck="A">8</button>
         <button data-loop="0" data-deck="A">Loop off</button>
@@ -64,9 +65,14 @@
     <section class="center-mixer">
       <div class="mixer-tabs"><button class="active" data-mixer-tab="MIXER">MIXER</button><button data-mixer-tab="FX">FX</button><button data-mixer-tab="FILTER">FILTER</button></div>
       <div id="mixerPanelMIXER" class="mixer-panel">
-        <div class="meter-block"><span>HI</span><input id="highA" type="range" min="-24" max="12" value="0"><input id="highB" type="range" min="-24" max="12" value="0"></div>
-        <div class="meter-block"><span>MID</span><input id="midA" type="range" min="-24" max="12" value="0"><input id="midB" type="range" min="-24" max="12" value="0"></div>
-        <div class="meter-block"><span>LOW</span><input id="lowA" type="range" min="-24" max="12" value="0"><input id="lowB" type="range" min="-24" max="12" value="0"></div>
+        <div class="meter-block"><span>HI</span><div class="eq-cell"><input id="highA" type="range" min="-24" max="12" value="0"><span id="highReadA" class="eq-read">0</span></div><div class="eq-cell"><input id="highB" type="range" min="-24" max="12" value="0"><span id="highReadB" class="eq-read">0</span></div></div>
+        <div class="meter-block"><span>MID</span><div class="eq-cell"><input id="midA" type="range" min="-24" max="12" value="0"><span id="midReadA" class="eq-read">0</span></div><div class="eq-cell"><input id="midB" type="range" min="-24" max="12" value="0"><span id="midReadB" class="eq-read">0</span></div></div>
+        <div class="meter-block"><span>LOW</span><div class="eq-cell"><input id="lowA" type="range" min="-24" max="12" value="0"><span id="lowReadA" class="eq-read">0</span></div><div class="eq-cell"><input id="lowB" type="range" min="-24" max="12" value="0"><span id="lowReadB" class="eq-read">0</span></div></div>
+        <div class="meter-block">
+          <span>VOL</span>
+          <input id="chanVolA" type="range" min="0" max="100" value="100">
+          <input id="chanVolB" type="range" min="0" max="100" value="100">
+        </div>
         <button id="syncBtn">Sync B to A</button>
         <label>Crossfader <input id="crossfader" type="range" min="-100" max="100" value="0"></label>
         <label>Master <input id="masterVolume" type="range" min="0" max="100" value="85"></label>
@@ -105,7 +111,7 @@
         </div>
         <div class="tempo-box"><strong id="bpmB">BPM --</strong><span id="tempoReadB">0.0%</span></div>
       </div>
-      <canvas id="platterB" class="platter" width="180" height="180"></canvas>
+      <canvas id="platterB" class="platter" width="220" height="220"></canvas>
       <div class="transport">
         <button id="loadToB">Load selected</button>
         <button id="playB" class="primary">Play</button>
@@ -118,6 +124,7 @@
       <div class="loop-strip">
         <button data-loop="0.5" data-deck="B">1/2</button>
         <button data-loop="1" data-deck="B">1</button>
+        <button data-loop="2" data-deck="B">2</button>
         <button data-loop="4" data-deck="B">4</button>
         <button data-loop="8" data-deck="B">8</button>
         <button data-loop="0" data-deck="B">Loop off</button>
@@ -294,6 +301,6 @@
     </div>
   </div>
 
-  <script src="/app.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
