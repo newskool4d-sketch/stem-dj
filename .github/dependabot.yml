@@ -9,6 +9,16 @@ updates:
       npm-root:
         patterns:
           - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: 'archiver'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
     labels:
       - 'dependencies'
       - 'npm'
@@ -25,6 +35,9 @@ updates:
       npm-workspace-server:
         patterns:
           - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
     labels:
       - 'dependencies'
       - 'npm'
