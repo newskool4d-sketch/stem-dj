@@ -72,6 +72,10 @@ function bindFxOverlayControls() {
         util.value = overlay.value;
         util.dispatchEvent(new Event("input")); // 기존 핸들러 실행
       });
+      // 역방향: 값만 복사 (이벤트 재발생 없음 → 재귀 방지)
+      util.addEventListener("input", () => {
+        overlay.value = util.value;
+      });
     });
 
     // 새 이펙터

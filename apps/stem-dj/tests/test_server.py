@@ -289,5 +289,106 @@ class JobLifecycleTest(unittest.TestCase):
                 server.time.time = original_time
 
 
+def raw_request(address: str, method: str, path: str, body: bytes | None = None,
+                headers: Mapping[str, str] | None = None) -> HttpResponse:
+    conn = http.client.HTTPConnection(address, timeout=5)
+    try:
+        conn.request(method, path, body=body, headers=dict(headers or {}))
+        res = conn.getresponse()
+        return HttpResponse(
+            status=res.status,
+            body=res.read(),
+            headers={name.lower(): value for name, value in res.getheaders()},
+        )
+    finally:
+        conn.close()
+
+
+class RangeRequestTest(unittest.TestCase):
+    def _media(self, fixture: ServerFixture, range_header: str) -> HttpResponse:
+        track = write_audio(fixture.library / "song.wav", b"0123456789")
+        tid = server.track_id(track)
+        with running_server() as (_, address):
+            return raw_request(address, "GET", f"/media?id={tid}", headers={"Range": range_header})
+
+    def test_suffix_range_returns_last_bytes(self) -> None:
+        # Given / When
+        with temp_fixture() as fixture:
+            response = self._media(fixture, "bytes=-3")
+
+            # Then
+            self.assertEqual(response.status, 206)
+            self.assertEqual(response.body, b"789")
+            self.assertEqual(response.headers["content-range"], "bytes 7-9/10")
+
+    def test_invalid_or_unsatisfiable_ranges_return_416(self) -> None:
+        # Given
+        with temp_fixture() as fixture:
+            for header in ("bytes=abc-def", "bytes=5-2", "bytes=10-", "bytes=-", "bytes=²-"):
+                with self.subTest(header=header):
+                    # When
+                    response = self._media(fixture, header)
+
+                    # Then
+                    self.assertEqual(response.status, 416)
+                    self.assertEqual(response.headers["content-range"], "bytes */10")
+
+
+class PostBodyValidationTest(unittest.TestCase):
+    def _post(self, address: str, path: str, body: bytes, extra: Mapping[str, str] | None = None) -> HttpResponse:
+        headers = {"Content-Type": "application/json", **(extra or {})}
+        return raw_request(address, "POST", path, body=body, headers=headers)
+
+    def test_malformed_and_non_object_json_return_400(self) -> None:
+        # Given
+        with temp_fixture():
+            with running_server() as (_, address):
+                for path in ("/api/settings", "/api/stems/start"):
+                    for body in (b"{not json", b"[]", bytes([0xFF, 0xFE]), b'{"id": [1]}'):
+                        with self.subTest(path=path, body=body):
+                            # When
+                            response = self._post(address, path, body)
+
+                            # Then
+                            self.assertIn(response.status, (400, 404))
+                            self.assertNotEqual(response.status, 500)
+
+    def test_oversized_body_returns_413(self) -> None:
+        # Given
+        with temp_fixture():
+            with running_server() as (_, address):
+                # When
+                response = self._post(address, "/api/settings", b"", {"Content-Length": str(server.MAX_JSON_BODY + 1)})
+
+                # Then
+                self.assertEqual(response.status, 413)
+
+
+class TrackIndexSwapTest(unittest.TestCase):
+    def test_rescan_keeps_existing_tracks_visible(self) -> None:
+        # Given
+        with temp_fixture() as fixture:
+            track = write_audio(fixture.library / "song.wav")
+            tid = server.track_id(track)
+            server.scan_library()
+            seen_missing = []
+
+            def reader() -> None:
+                for _ in range(200):
+                    with server.TRACKS_LOCK:
+                        if tid not in server.TRACKS:
+                            seen_missing.append(True)
+
+            # When
+            thread = threading.Thread(target=reader)
+            thread.start()
+            for _ in range(20):
+                server.scan_library()
+            thread.join(timeout=5)
+
+            # Then
+            self.assertEqual(seen_missing, [])
+
+
 if __name__ == "__main__":
     unittest.main()
