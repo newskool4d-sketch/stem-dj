@@ -34,8 +34,10 @@ ALLOWED_ORIGINS = frozenset({
 JOB_RETENTION_SECONDS = 3600
 ACTIVE_JOB_STALE_SECONDS = 3600
 STALE_JOB_MESSAGE = "stem 분리 작업이 오래 응답하지 않아 중단된 것으로 표시했습니다. 다시 시도해 주세요."
+MAX_JSON_BODY = 64 * 1024
 
 TRACKS: dict[str, Path] = {}
+TRACKS_LOCK = threading.Lock()
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
 SCAN_STATE = {"limited": False, "message": ""}
@@ -87,7 +89,8 @@ def scan_library() -> list[dict]:
     deadline = time.monotonic() + 6
     max_tracks = 2000
     tracks = []
-    TRACKS.clear()
+    # 스캔 중 다른 요청이 빈 TRACKS를 보지 않도록 지역 dict에 모은 뒤 한 번에 교체한다.
+    new_tracks: dict[str, Path] = {}
     limited = False
     try:
         for root, dirnames, filenames in os.walk(base_dir):
@@ -107,7 +110,7 @@ def scan_library() -> list[dict]:
                 if path.suffix.lower() not in AUDIO_EXTENSIONS:
                     continue
                 tid = track_id(path)
-                TRACKS[tid] = path
+                new_tracks[tid] = path
                 stat = path.stat()
                 tracks.append(
                     {
@@ -122,6 +125,9 @@ def scan_library() -> list[dict]:
                     }
                 )
     finally:
+        with TRACKS_LOCK:
+            TRACKS.clear()
+            TRACKS.update(new_tracks)
         SCAN_STATE["limited"] = limited
         SCAN_STATE["message"] = (
             f"라이브러리가 커서 먼저 찾은 {len(tracks)}개만 표시했습니다."
@@ -131,9 +137,14 @@ def scan_library() -> list[dict]:
 
 
 def safe_track_path(tid: str) -> Path | None:
-    if tid not in TRACKS:
+    if not isinstance(tid, str) or not tid:
+        return None
+    with TRACKS_LOCK:
+        path = TRACKS.get(tid)
+    if path is None:
         scan_library()
-    path = TRACKS.get(tid)
+        with TRACKS_LOCK:
+            path = TRACKS.get(tid)
     if not path:
         return None
     if not path_is_inside(path, library_dir()):
@@ -195,13 +206,24 @@ def stream_file(handler: SimpleHTTPRequestHandler, path: Path) -> None:
     end = size - 1
     range_header = handler.headers.get("Range")
     if range_header and range_header.startswith("bytes="):
-        chunk = range_header.split("=", 1)[1].split(",", 1)[0]
+        chunk = range_header.split("=", 1)[1].split(",", 1)[0].strip()
         left, _, right = chunk.partition("-")
-        if left:
+        # isdigit()만으로는 '²' 같은 유니코드 숫자가 통과해 int()에서 예외가 나므로 ASCII로 제한한다.
+        is_num = lambda x: x.isascii() and x.isdigit()
+        valid = (is_num(left) or not left) and (is_num(right) or not right) and bool(left or right)
+        if valid and not left:
+            # suffix range: bytes=-N → 마지막 N바이트
+            start = max(0, size - int(right))
+        elif valid:
             start = int(left)
-        if right:
-            end = int(right)
-        end = min(end, size - 1)
+            if right:
+                end = min(int(right), size - 1)
+        if not valid or start > end or start >= size:
+            handler.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+            handler.send_header("Content-Range", f"bytes */{size}")
+            handler.send_header("Content-Length", "0")
+            handler.end_headers()
+            return
         handler.send_response(HTTPStatus.PARTIAL_CONTENT)
         handler.send_header("Content-Range", f"bytes {start}-{end}/{size}")
     else:
@@ -365,13 +387,36 @@ class StemDJHandler(SimpleHTTPRequestHandler):
             return True
         return False
 
+    def _read_json_object(self) -> dict | None:
+        """JSON 객체 본문을 읽는다. 실패 시 오류 응답을 보내고 None을 반환한다."""
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            length = -1
+        if length < 0:
+            write_json(self, {"status": "error", "message": "Content-Length가 올바르지 않습니다."}, 400)
+            return None
+        if length > MAX_JSON_BODY:
+            write_json(self, {"status": "error", "message": "요청 본문이 너무 큽니다."}, 413)
+            return None
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            write_json(self, {"status": "error", "message": "JSON 본문을 해석할 수 없습니다."}, 400)
+            return None
+        if not isinstance(payload, dict):
+            write_json(self, {"status": "error", "message": "JSON 객체 본문이 필요합니다."}, 400)
+            return None
+        return payload
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         if self._reject_csrf():
             return
         if parsed.path == "/api/settings":
-            length = int(self.headers.get("Content-Length", "0") or 0)
-            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            payload = self._read_json_object()
+            if payload is None:
+                return
             library = str(payload.get("library", "")).strip()
             if not library:
                 write_json(self, {"status": "error", "message": "라이브러리 경로가 비어 있습니다."}, 400)
@@ -380,7 +425,6 @@ class StemDJHandler(SimpleHTTPRequestHandler):
             try:
                 target.mkdir(parents=True, exist_ok=True)
                 save_config({"library": str(target)})
-                TRACKS.clear()
                 ensure_dirs()
             except Exception as exc:
                 write_json(self, {"status": "error", "message": str(exc)}, 400)
@@ -391,8 +435,9 @@ class StemDJHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, "not found")
             return
         purge_old_jobs()
-        length = int(self.headers.get("Content-Length", "0") or 0)
-        payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        payload = self._read_json_object()
+        if payload is None:
+            return
         tid = payload.get("id", "")
         if not safe_track_path(tid):
             write_json(self, {"status": "error", "message": "트랙을 찾을 수 없습니다."}, 404)

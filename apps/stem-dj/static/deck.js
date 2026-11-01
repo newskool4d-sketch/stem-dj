@@ -2,7 +2,7 @@
 import { $, log, fmtTime, playbackSupportHint, setBpmCache } from "./util.js";
 import { estimateBpm, makePeaks, sliceFrames } from "./analysis.js";
 import { computeStemGains, loopWrapPosition, clampSeek } from "./deck-logic.js";
-import { applyAudioParamTarget, audioParamTarget } from "./audio-params.js";
+import { applyAudioParamTarget, audioParamTarget, percentToUnitTarget } from "./audio-params.js";
 import {
   loopAwareSeekTarget,
   scratchGrainMetadata,
@@ -16,6 +16,9 @@ import { refreshLibrary } from "./library.js";
 
 export const STEMS = ["vocals", "drums", "bass", "other"];
 const STEM_LABELS = { vocals: "Vocal", drums: "Drums", bass: "Bass", other: "Other" };
+
+const STEM_POLL_INTERVAL_MS = 2500;
+const STEM_POLL_MAX_FAILURES = 5;
 
 let bitcrusherModuleLoaded = false;
 
@@ -51,6 +54,8 @@ export class Deck {
     this.lastWaveDrawAt = 0;
     this.lastPlatterDrawAt = 0;
     this.stemJobRunning = false;
+    this.stemPollTimer = null;
+    this.stemPollGen = 0;
     this.buildStemControls();
     this.bindControls();
     this.drawPlatter();
@@ -136,8 +141,9 @@ export class Deck {
       }
     });
     $(`stem${this.id}`).addEventListener("click", () => splitStems(this));
+    const now = () => audioCtx?.currentTime ?? 0;
     $(`chanVol${this.id}`)?.addEventListener("input", (e) => {
-      if (this.chanGain) this.chanGain.gain.value = Number(e.target.value) / 100;
+      applyAudioParamTarget(this.chanGain?.gain, percentToUnitTarget(e.target.value, { now: now() }));
     });
     $(`tempo${this.id}`).addEventListener("input", (e) => {
       const value = Number(e.target.value);
@@ -152,29 +158,30 @@ export class Deck {
       updateRead(Number(input.value));
       input.addEventListener("input", (e) => {
         const v = Number(e.target.value);
-        if (this[name]) this[name].gain.value = v;
+        applyAudioParamTarget(this[name]?.gain, audioParamTarget(v, { min: -24, max: 12, now: now() }));
         updateRead(v);
       });
     });
     $(`filter${this.id}`).addEventListener("input", (e) => {
       if (!this.filter) return;
       const value = Number(e.target.value);
+      let frequency = 1200;
       if (value === 0) {
         this.filter.type = "allpass";
-        this.filter.frequency.value = 1200;
       } else if (value < 0) {
         this.filter.type = "lowpass";
-        this.filter.frequency.value = 220 + (100 + value) * 72;
+        frequency = 220 + (100 + value) * 72;
       } else {
         this.filter.type = "highpass";
-        this.filter.frequency.value = 80 + value * 38;
+        frequency = 80 + value * 38;
       }
+      applyAudioParamTarget(this.filter.frequency, audioParamTarget(frequency, { min: 20, max: 20000, now: now() }));
     });
     $(`echo${this.id}`).addEventListener("input", (e) => {
-      if (this.echoWet) this.echoWet.gain.value = Number(e.target.value) / 100;
+      applyAudioParamTarget(this.echoWet?.gain, percentToUnitTarget(e.target.value, { now: now() }));
     });
     $(`reverb${this.id}`).addEventListener("input", (e) => {
-      if (this.reverbWet) this.reverbWet.gain.value = Number(e.target.value) / 100;
+      applyAudioParamTarget(this.reverbWet?.gain, percentToUnitTarget(e.target.value, { now: now() }));
     });
     const vinyl = $(`vinyl${this.id}`);
     if (vinyl) {
@@ -273,6 +280,7 @@ export class Deck {
 
   async loadMix(track) {
     await this.initGraph();
+    cancelStemPoll(this);
     this.stop();
     this.disconnectSources();
     this.track = track;
@@ -611,6 +619,9 @@ export class Deck {
     canvas.addEventListener("pointermove", move);
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
+    // 드래그 중 포인터 캡처를 잃거나 창 포커스가 빠지면 드래그 상태를 해제한다.
+    canvas.addEventListener("lostpointercapture", up);
+    window.addEventListener("blur", up);
   }
 
   playScratchGrain(dx, dt) {
@@ -635,6 +646,10 @@ export class Deck {
     env.gain.exponentialRampToValueAtTime(0.0001, now + grain.duration * 0.9);
     source.connect(env);
     env.connect(this.deckInput);
+    source.addEventListener("ended", () => {
+      source.disconnect();
+      env.disconnect();
+    }, { once: true });
     source.start(now);
     source.stop(now + grain.duration + 0.02);
   }
@@ -665,8 +680,10 @@ export async function splitStems(deck) {
     return;
   }
   deck.stemJobRunning = true;
+  const gen = deck.stemPollGen;
   try {
     const check = await fetch(`/api/stems?id=${deck.track.id}`).then((r) => r.json());
+    if (deck.stemPollGen !== gen) return;  // 대기 중 다른 곡이 로드됨
     log(`Deck ${deck.id}: ${stemReadinessLabel(check)}`);
     if (check.ready) {
       await deck.loadStems(check.stems);
@@ -678,32 +695,73 @@ export async function splitStems(deck) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: deck.track.id }),
     }).then((r) => r.json());
+    if (deck.stemPollGen !== gen) return;
     if (started.status === "error") {
       log(started.message);
       deck.stemJobRunning = false;
       return;
     }
+    if (started.status === "done") {
+      deck.stemJobRunning = false;
+      await deck.loadStems(started.stems);
+      return;
+    }
     log(`Deck ${deck.id} stem job queued`);
     pollStemJob(deck, started.job);
   } catch (err) {
+    if (deck.stemPollGen !== gen) return;
     deck.stemJobRunning = false;
     log(`Deck ${deck.id} stem split failed: ${err.message}`);
   }
 }
 
-async function pollStemJob(deck, job) {
-  const timer = setInterval(async () => {
-    const state = await fetch(`/api/stems/job?job=${encodeURIComponent(job)}`).then((r) => r.json());
+function cancelStemPoll(deck) {
+  clearTimeout(deck.stemPollTimer);
+  deck.stemPollTimer = null;
+  deck.stemPollGen += 1;
+  deck.stemJobRunning = false;
+}
+
+// setTimeout 체인으로 요청이 겹치지 않게 폴링한다. 연속 실패 한도를 넘거나
+// 덱에 곡이 새로 로드되면(stemPollGen 변경) 결과를 버리고 중단한다.
+function pollStemJob(deck, job) {
+  const gen = deck.stemPollGen;
+  let failures = 0;
+  const poll = async () => {
+    deck.stemPollTimer = null;
+    let state;
+    try {
+      const res = await fetch(`/api/stems/job?job=${encodeURIComponent(job)}`);
+      state = await res.json();
+      failures = 0;
+    } catch (err) {
+      failures += 1;
+      if (deck.stemPollGen !== gen) return;
+      if (failures >= STEM_POLL_MAX_FAILURES) {
+        deck.stemJobRunning = false;
+        log(`Deck ${deck.id} stem 상태 확인 실패(${failures}회 연속): ${err.message}`);
+        return;
+      }
+      deck.stemPollTimer = setTimeout(poll, STEM_POLL_INTERVAL_MS * 2 ** failures);
+      return;
+    }
+    if (deck.stemPollGen !== gen) return;
     log(formatStemJobStatus(state));
     if (state.status === "done") {
-      clearInterval(timer);
       deck.stemJobRunning = false;
-      await deck.loadStems(state.stems);
-      await refreshLibrary();
+      try {
+        await deck.loadStems(state.stems);
+        await refreshLibrary();
+      } catch (err) {
+        log(`Deck ${deck.id} stem 로드 실패: ${err.message}`);
+      }
+      return;
     }
     if (state.status === "error" || state.status === "missing") {
-      clearInterval(timer);
       deck.stemJobRunning = false;
+      return;
     }
-  }, 2500);
+    deck.stemPollTimer = setTimeout(poll, STEM_POLL_INTERVAL_MS);
+  };
+  deck.stemPollTimer = setTimeout(poll, STEM_POLL_INTERVAL_MS);
 }

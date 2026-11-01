@@ -7,6 +7,7 @@ const localObjectUrls = [];
 
 // initLibrary로 주입되는 어댑터
 let loadTrack = () => {};
+const BROWSE_EXTS = ["mp3", "wav", "flac", "m4a", "aac", "ogg"];
 let activeUrls = () => new Set();
 
 export function initLibrary(adapters) {
@@ -25,6 +26,7 @@ export async function refreshLibrary() {
     }
   }
   const res = await fetch("/api/library");
+  if (!res.ok) throw new Error(`라이브러리 조회 실패 (HTTP ${res.status})`);
   const data = await res.json();
   libraryTracks = data.tracks;
   libraryTracks.forEach(t => { if (!t.bpm) t.bpm = getBpmCache(t.id); });
@@ -66,6 +68,7 @@ export function renderTracks() {
       renderSelectedPreview();
     });
     row.addEventListener("dblclick", () => loadTrack("A", track));
+    makeRowKeyboardSelectable(row, track, list, ".track");
     list.appendChild(row);
   });
 }
@@ -138,6 +141,7 @@ export function renderLibraryTab() {
       rows.querySelectorAll(".lib-row").forEach((r) => r.classList.remove("selected"));
       row.classList.add("selected");
     });
+    makeRowKeyboardSelectable(row, track, rows, ".lib-row");
 
     rows.appendChild(row);
   });
@@ -153,8 +157,7 @@ export function renderBrowseTab() {
   const bpmMax = Number($("bpmMax")?.value ?? 220);
   const stemsReady = $("fStemsReady")?.checked ?? false;
   const stemsNo = $("fStemsNo")?.checked ?? false;
-  const extChecks = ["mp3", "wav", "flac", "m4a"];
-  const exts = extChecks.filter((e) => $(`fExt_${e}`)?.checked ?? false);
+  const exts = BROWSE_EXTS.filter((e) => $(`fExt_${e}`)?.checked ?? false);
 
   const results = libraryTracks.filter((t) => {
     const bpm = t.bpm;
@@ -213,6 +216,23 @@ export function renderBrowseTab() {
     row.appendChild(info);
     row.appendChild(actions);
     container.appendChild(row);
+  });
+}
+
+// 행을 Tab 포커스 가능하게 하고 Enter/Space로 클릭(선택)과 동일하게 동작시킨다.
+// 전역 단축키(Space=Deck A, Enter=Deck B)로 전파되지 않도록 막고,
+// 클릭 핸들러가 목록을 다시 그리므로 같은 트랙 행에 포커스를 복원한다.
+function makeRowKeyboardSelectable(row, track, container, selector) {
+  row.tabIndex = 0;
+  row.dataset.trackKey = track.id ?? track.url;
+  row.addEventListener("keydown", (e) => {
+    if (e.target !== row || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const key = row.dataset.trackKey;
+    row.click();
+    const next = [...container.querySelectorAll(selector)].find((r) => r.dataset.trackKey === key);
+    next?.focus();
   });
 }
 
@@ -287,7 +307,7 @@ function bindLibraryControls() {
     $("bpmMin").value = 60;
     $("bpmMax").value = 200;
     ["fStemsReady", "fStemsNo"].forEach((id) => { $(id).checked = true; });
-    ["mp3", "wav", "flac", "m4a"].forEach((e) => { $(`fExt_${e}`).checked = true; });
+    BROWSE_EXTS.forEach((e) => { $(`fExt_${e}`).checked = true; });
     renderBrowseTab();
   });
   $("loadToA").addEventListener("click", () => loadSelectedTo("A"));
