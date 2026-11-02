@@ -706,7 +706,7 @@ export async function splitStems(deck) {
       await deck.loadStems(started.stems);
       return;
     }
-    log(`Deck ${deck.id} stem job queued`);
+    log(`Deck ${deck.id} stem job ${started.status}`);  // 같은 곡의 기존 작업이면 running
     pollStemJob(deck, started.job);
   } catch (err) {
     if (deck.stemPollGen !== gen) return;

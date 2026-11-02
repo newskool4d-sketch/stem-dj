@@ -44,11 +44,56 @@ function activateTab(name) {
   if (name === "BROWSE") renderBrowseTab();
 }
 
+const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+let overlayReturnFocus = null;
+
 function toggleOverlay(name) {
-  const id = name === "REC" ? "recOverlay" : "fxOverlay";
-  const el = document.getElementById(id);
-  el.hidden = !el.hidden;
-  if (!el.hidden && name === "FX") syncFxOverlaySliders();
+  const el = document.getElementById(name === "REC" ? "recOverlay" : "fxOverlay");
+  if (el.hidden) openOverlay(el);
+  else closeOverlay(el);
+}
+
+function openOverlay(el) {
+  document.querySelectorAll(".overlay:not([hidden])").forEach((o) => { o.hidden = true; });
+  overlayReturnFocus = overlayReturnFocus ?? document.activeElement;
+  el.hidden = false;
+  if (el.id === "fxOverlay") syncFxOverlaySliders();
+  el.querySelector(".overlay-panel input, .overlay-panel button:not(.overlay-close)")?.focus();
+}
+
+function closeOverlay(el) {
+  el.hidden = true;
+  overlayReturnFocus?.focus?.();
+  overlayReturnFocus = null;
+}
+
+// 열린 오버레이 안에서 Escape 닫기·Tab 순환. 처리했으면 true.
+function handleOverlayKey(e) {
+  const el = document.querySelector(".overlay:not([hidden])");
+  if (!el) return false;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeOverlay(el);
+    return true;
+  }
+  if (e.key === "Tab") {
+    const items = [...el.querySelectorAll(FOCUSABLE)].filter((n) => !n.hidden && !n.disabled);
+    if (!items.length) return false;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!el.contains(document.activeElement)) {
+      e.preventDefault();
+      first.focus();
+    } else if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+    return true;
+  }
+  return false;
 }
 
 function syncFxOverlaySliders() {
@@ -115,9 +160,7 @@ function bindGlobalControls() {
     btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });
   document.querySelectorAll(".overlay-close[data-close]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.getElementById(btn.dataset.close).hidden = true;
-    });
+    btn.addEventListener("click", () => closeOverlay(document.getElementById(btn.dataset.close)));
   });
   $("crossfader").addEventListener("input", updateCrossfader);
   $("masterVolume").addEventListener("input", (event) => {
@@ -147,8 +190,12 @@ function bindGlobalControls() {
   bindFxOverlayControls();
 
   document.addEventListener("keydown", (e) => {
+    if (handleOverlayKey(e)) return;
     const tag = document.activeElement?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    // 버튼·링크에 포커스가 있으면 Space/Enter는 그 요소의 기본 동작(클릭)에 맡긴다
+    if ((e.code === "Space" || e.code === "Enter") &&
+        document.activeElement?.closest("button, a[href], summary, [role='button']")) return;
     switch (e.code) {
       case "Space":       e.preventDefault(); decks.A.togglePlay(); break;
       case "Enter":       e.preventDefault(); decks.B.togglePlay(); break;
