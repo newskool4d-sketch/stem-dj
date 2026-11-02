@@ -221,28 +221,45 @@ class StemRouteSecurityTest(unittest.TestCase):
 
 
 class JobLifecycleTest(unittest.TestCase):
-    def test_same_second_stem_starts_get_different_job_ids(self) -> None:
+    def test_same_second_job_ids_are_unique(self) -> None:
+        # Given
+        original_time = server.time.time
+        server.time.time = lambda: 1000.0
+        try:
+            # When
+            first = server.new_job_id("track")
+            second = server.new_job_id("track")
+        finally:
+            server.time.time = original_time
+
+        # Then
+        self.assertNotEqual(first, second)
+
+    def test_restarting_active_track_reuses_job(self) -> None:
         # Given
         with temp_fixture() as fixture:
             track = write_audio(fixture.library / "song.wav")
-            tid = server.track_id(track)
-            original_time = server.time.time
+            other = write_audio(fixture.library / "other.wav")
+            tid, other_tid = server.track_id(track), server.track_id(other)
             original_worker = server.run_demucs_job
-            server.time.time = lambda: 1000.0
             server.run_demucs_job = lambda job_id, track_id: None
             try:
                 # When
                 with running_server() as (_, address):
                     first = post_json(address, "/api/stems/start", {"id": tid}).json()
                     second = post_json(address, "/api/stems/start", {"id": tid}).json()
+                    third = post_json(address, "/api/stems/start", {"id": other_tid}).json()
+                    server.set_job(first["job"], status="error")
+                    fourth = post_json(address, "/api/stems/start", {"id": tid}).json()
             finally:
-                server.time.time = original_time
                 server.run_demucs_job = original_worker
 
             # Then
             self.assertEqual(first["status"], "queued")
-            self.assertEqual(second["status"], "queued")
-            self.assertNotEqual(first["job"], second["job"])
+            self.assertEqual(second["job"], first["job"])
+            self.assertNotEqual(third["job"], first["job"])
+            self.assertNotEqual(fourth["job"], first["job"])
+            self.assertEqual(len(server.JOBS), 3)
 
     def test_purge_old_jobs_removes_terminal_and_errors_stale_active_jobs(self) -> None:
         # Given
