@@ -445,11 +445,28 @@ class StemDJHandler(SimpleHTTPRequestHandler):
         if stems_ready(tid):
             write_json(self, {"status": "done", "message": "이미 분리된 stem이 있습니다.", **stem_payload(tid)})
             return
-        job_id = new_job_id(tid)
-        set_job(job_id, status="queued", message="stem 분리 대기 중입니다.")
-        thread = threading.Thread(target=run_demucs_job, args=(job_id, tid), daemon=True)
-        thread.start()
-        write_json(self, {"status": "queued", "job": job_id})
+        # 같은 트랙의 작업이 이미 대기·진행 중이면 새로 띄우지 않고 그 작업을 돌려준다
+        # (덱에서 곡을 바꿨다 돌아와 다시 누르면 같은 대상 폴더에 중복 복사되는 것을 막음).
+        with JOBS_LOCK:
+            active = next(
+                (
+                    (jid, job) for jid, job in JOBS.items()
+                    if job.get("track") == tid and job.get("status") in ("queued", "running")
+                ),
+                None,
+            )
+            if active:
+                job_id, status = active[0], active[1]["status"]
+            else:
+                job_id, status = new_job_id(tid), "queued"
+                JOBS[job_id] = {
+                    "status": status, "track": tid,
+                    "message": "stem 분리 대기 중입니다.", "updated": time.time(),
+                }
+        if not active:
+            thread = threading.Thread(target=run_demucs_job, args=(job_id, tid), daemon=True)
+            thread.start()
+        write_json(self, {"status": status, "job": job_id})
 
 
 def main() -> None:

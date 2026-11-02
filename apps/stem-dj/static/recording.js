@@ -1,6 +1,6 @@
 // 마스터 녹음 — MediaRecorder + 타이머 + 레벨미터
 import { $, log } from "./util.js";
-import { audioCtx, masterGain, recorderDestination, ensureAudio } from "./audio-engine.js";
+import { audioCtx, masterOutput, recorderDestination, ensureAudio } from "./audio-engine.js";
 
 let mediaRecorder;
 let recordedChunks = [];
@@ -29,11 +29,11 @@ function stopRecTimer() {
 }
 
 function startLevelMeter() {
-  if (!audioCtx || !masterGain) return;
+  if (!audioCtx || !masterOutput) return;
   if (!recAnalyser) {
     recAnalyser = audioCtx.createAnalyser();
     recAnalyser.fftSize = 256;
-    masterGain.connect(recAnalyser);
+    masterOutput.connect(recAnalyser);
   }
   const canvas = $("recLevel");
   if (!canvas) return;

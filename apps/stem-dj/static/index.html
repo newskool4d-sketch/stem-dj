@@ -162,12 +162,6 @@
   </section>
 
   <section class="library-zone">
-    <aside class="library-menu">
-      <strong>Collection</strong>
-      <span class="disabled">All Tracks</span>
-      <span class="disabled">Stems</span>
-      <span class="disabled">Playlists</span>
-    </aside>
     <section class="library-main">
       <div class="library-settings">
         <input id="libraryInput" type="text" placeholder="Library folder path">
@@ -255,10 +249,10 @@
 
   <!-- REC 오버레이 -->
   <div id="recOverlay" class="overlay" hidden>
-    <div class="overlay-panel">
+    <div class="overlay-panel" role="dialog" aria-modal="true" aria-labelledby="recOverlayTitle">
       <div class="overlay-header">
-        <span>REC</span>
-        <button class="overlay-close" data-close="recOverlay">✕</button>
+        <span id="recOverlayTitle">REC</span>
+        <button class="overlay-close" data-close="recOverlay" aria-label="Close REC">✕</button>
       </div>
       <div class="rec-content">
         <div id="recTimer" class="rec-timer">00:00:00</div>
@@ -273,10 +267,10 @@
 
   <!-- FX 오버레이 -->
   <div id="fxOverlay" class="overlay" hidden>
-    <div class="overlay-panel overlay-wide">
+    <div class="overlay-panel overlay-wide" role="dialog" aria-modal="true" aria-labelledby="fxOverlayTitle">
       <div class="overlay-header">
-        <span>FX</span>
-        <button class="overlay-close" data-close="fxOverlay">✕</button>
+        <span id="fxOverlayTitle">FX</span>
+        <button class="overlay-close" data-close="fxOverlay" aria-label="Close FX">✕</button>
       </div>
       <div class="fx-overlay-grid">
         <div class="fx-col">
